@@ -1,6 +1,8 @@
 import os
 import logging
 import warnings
+import datetime
+import os
 
 logger = logging.getLogger(__name__)
 warnings.simplefilter('ignore', UserWarning)
@@ -52,7 +54,9 @@ def main(args):
     ema_model.train()
     # Trainable Augmentation
     rbuffer = augmentation.replay_buffer.ReplayBuffer(args.rb_decay)
-    trainable_aug = augmentation.build_augmentation(n_classes, args.g_scale, args.c_scale,
+    trainable_aug = augmentation.build_augmentation(n_classes,
+                                                    args.g_offset, args.g_scale, args.g_scale_unlimited,
+                                                    args.c_scale, args.c_scale_unlimited, args.c_shift_unlimited,
                                                     args.c_reg_coef, normalizer, rbuffer,
                                                     args.batch_size // args.group_size,
                                                     not args.wo_context).to(device)
@@ -65,10 +69,22 @@ def main(args):
     # Optimizer
     optim_cls = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, nesterov=True, weight_decay=0)
     optim_aug = optim.AdamW(trainable_aug.parameters(), lr=args.aug_lr, weight_decay=args.aug_weight_decay)
-    if args.dataset == 'ImageNet':
-        scheduler = lr_scheduler.MultiStepLRWithLinearWarmup(optim_cls, 5, [90, 180, 240], 0.1)
+
+    if args.scheduler == 'original':
+        if args.dataset == 'ImageNet':
+            scheduler = lr_scheduler.MultiStepLRWithLinearWarmup(optim_cls, 5, [90, 180, 240], 0.1)
+        else:
+            scheduler = lr_scheduler.CosineAnnealingWithLinearWarmup(optim_cls, 5, args.n_epochs)
+    elif args.scheduler == 'gradual_warm':
+        from warmup_scheduler import GradualWarmupScheduler
+        if args.dataset == 'ImageNet':
+            base_scheduler = optim.lr_scheduler.MultiStepLR(optim_cls, [90, 180, 240], 0.1)
+            scheduler = GradualWarmupScheduler(optim_cls, 1, 5, base_scheduler)
+        else:
+            base_scheduler = optim.lr_scheduler.CosineAnnealingLR(optim_cls, args.n_epochs)
+            scheduler = GradualWarmupScheduler(optim_cls, 1, 5, base_scheduler)
     else:
-        scheduler = lr_scheduler.CosineAnnealingWithLinearWarmup(optim_cls, 5, args.n_epochs)
+        raise Exception(f'args.scheduler should be "original" or "gradual_warm", current value: {args.scheduler}')
 
     # Following Fast AutoAugment (https://github.com/kakaobrain/fast-autoaugment),
     # pytorch-gradual-warmup-lr (https://github.com/ildoonet/pytorch-gradual-warmup-lr) was used for the paper experiments.
@@ -213,11 +229,20 @@ if __name__ == '__main__':
                         help='learning rate for augmentation model')
     parser.add_argument('--aug_weight_decay', '-awd', default=1e-2, type=float,
                         help='weight decay for augmentation model')
+    parser.add_argument('--scheduler', default='original', choices=['original', 'gradual_warm'], type=str)
     # Augmentation
+    parser.add_argument('--g_offset', default=-0.5, type=float,
+                        help='the search range offset of the magnitude of geometric augmantation')
     parser.add_argument('--g_scale', default=0.5, type=float,
                         help='the search range of the magnitude of geometric augmantation')
+    parser.add_argument('--g_scale_unlimited', default=False, action='store_true',
+                        help='if true, the search range of the magnitude of geometric augmantation is (-inf, inf)')
     parser.add_argument('--c_scale', default=0.8, type=float,
                         help='the search range of the magnitude of color augmantation')
+    parser.add_argument('--c_scale_unlimited', default=False, action='store_true',
+                        help='if true, the search range of the magnitude of color scale augmentation is (-inf, inf)')
+    parser.add_argument('--c_shift_unlimited', default=False, action='store_true',
+                        help='if true, the search range of the magnitude of color shift augmentation is (-inf, inf)')
     parser.add_argument('--group_size', default=8, type=int)
     parser.add_argument('--wo_context', action='store_true',
                         help='without context vector as input')
@@ -272,9 +297,16 @@ if __name__ == '__main__':
         args = utils.override_config(args, json_cfg)
 
     utils.set_seed(args.seed)
+
+    now = datetime.datetime.now().strftime("%Y%m%d-%H:%M:%S")
+    args.log_dir = os.path.join(args.log_dir, now)
+    if not os.path.exists(args.log_dir):
+        os.makedirs(args.log_dir) 
+
     if args.local_rank == 0:
         utils.setup_logger(args.log_dir, args.resume)
     if args.dist:
         utils.setup_ddp(args)
-
+    
+    # TODO: Tensorboard 붙이기
     main(args)

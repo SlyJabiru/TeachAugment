@@ -28,7 +28,7 @@ class TriangleWave(torch.autograd.Function):
 
 
 class ColorAugmentation(nn.Module):
-    def __init__(self, n_classes=10, scale=1, hidden=128, n_dim=128, dropout_ratio=0.8, with_context=True):
+    def __init__(self, n_classes=10, scale=1, c_scale_unlimited=False, c_shift_unlimited=False, hidden=128, n_dim=128, dropout_ratio=0.8, with_context=True):
         super().__init__()
 
         n_hidden = 4 * n_dim
@@ -81,8 +81,12 @@ class ColorAugmentation(nn.Module):
         self.n_classes = n_classes
         self.n_dim = n_dim
         self.scale = scale
+        self.c_scale_unlimited = c_scale_unlimited
+        self.c_shift_unlimited = c_shift_unlimited
         self.relax = True
         self.stochastic = True
+        print(f'------------------- self.c_scale_unlimited: {self.c_scale_unlimited} -------------------')
+        print(f'------------------- self.c_shift_unlimited: {self.c_shift_unlimited} -------------------')
 
     def sampling(self, scale, shift, y, temp=0.05):
         if self.stochastic: # random apply
@@ -117,11 +121,19 @@ class ColorAugmentation(nn.Module):
         # add up parameters
         scale, shift = factor.chunk(2, dim=1)
         g_scale, g_shift = gfactor.chunk(2, dim=1)
-        scale = (g_scale + scale).sigmoid()
-        shift = (g_shift + shift).sigmoid()
-        # scaling
-        scale = self.scale * (scale - 0.5) + 1
-        shift = shift - 0.5
+
+        if self.c_scale_unlimited:
+            scale = g_scale + scale
+        else:
+            scale = (g_scale + scale).sigmoid() # \in (0, 1) alpha.
+            scale = self.scale * (scale - 0.5) + 1 # alpha in paper.
+
+        if self.c_shift_unlimited:
+            shift = g_shift + shift
+        else:
+            shift = (g_shift + shift).sigmoid() # \in (0, 1) beta.
+            shift = shift - 0.5 # beta in paper.
+
         # random apply
         scale, shift = self.sampling(scale, shift, c)
 
@@ -151,7 +163,7 @@ class ColorAugmentation(nn.Module):
         
 
 class GeometricAugmentation(nn.Module):
-    def __init__(self, n_classes=10, scale=0.5, n_dim=128, dropout_ratio=0.8, with_context=True):
+    def __init__(self, n_classes=10, offset=-0.5, scale=0.5, g_scale_unlimited=False, n_dim=128, dropout_ratio=0.8, with_context=True):
         super().__init__()
 
         hidden = 4 * n_dim
@@ -184,9 +196,13 @@ class GeometricAugmentation(nn.Module):
         self.n_classes = n_classes
         self.n_dim = n_dim
         self.scale = scale
+        self.g_scale_unlimited = g_scale_unlimited
+        self.offset = offset
 
         self.relax = True
         self.stochastic = True
+
+        print(f'------------------- self.g_scale_unlimited: {self.g_scale_unlimited} -------------------')
 
     def sampling(self, A, y=None, temp=0.05):
         if self.stochastic: # random apply
@@ -210,7 +226,10 @@ class GeometricAugmentation(nn.Module):
         features = self.body(noise)
         A = self.regressor(features).reshape(-1, 2, 3)
         # scaling
-        A = self.scale * (A.sigmoid() - 0.5) + self.i_matrix
+        if self.g_scale_unlimited:
+            A = A + self.i_matrix
+        else:
+            A = self.scale * (A.sigmoid() - self.offset) + self.i_matrix
         # random apply
         A = self.sampling(A, c)
         # matrix to grid representation

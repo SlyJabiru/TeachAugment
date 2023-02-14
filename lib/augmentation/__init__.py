@@ -31,8 +31,12 @@ def get_transforms(dataset):
     return base_aug, train_transform, val_transform, normalizer
 
 
-def build_augmentation(n_classes, g_scale, c_scale, c_reg_coef=0, normalizer=None, replay_buffer=None, n_chunk=16, with_context=True):
-    g_aug = nn_aug.GeometricAugmentation(n_classes, g_scale, with_context=with_context)
-    c_aug = nn_aug.ColorAugmentation(n_classes, c_scale, with_context=with_context)
+def build_augmentation(n_classes,
+                       g_offset, g_scale, g_scale_unlimited,
+                       c_scale, c_scale_unlimited, c_shift_unlimited,
+                       c_reg_coef=0, normalizer=None, replay_buffer=None,
+                       n_chunk=16, with_context=True):
+    g_aug = nn_aug.GeometricAugmentation(n_classes, g_offset, g_scale, g_scale_unlimited, with_context=with_context)
+    c_aug = nn_aug.ColorAugmentation(n_classes, c_scale, c_scale_unlimited, c_shift_unlimited, with_context=with_context)
     augmentation = augmentation_container.AugmentationContainer(c_aug, g_aug, c_reg_coef, normalizer, replay_buffer, n_chunk)
     return augmentation
