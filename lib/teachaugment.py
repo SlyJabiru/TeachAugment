@@ -99,7 +99,7 @@ class TeachAugment(nn.Module):
             x = self.normalizer(x)
         # calculate loss
         tar_pred = self.model(x)
-        loss_adv = self.adv_criterion(tar_pred, y)
+        loss_adv = self.adv_criterion(tar_pred, y) # NonSaturatingLoss
         # compute gradient to release the memory for the computational graph
         # NOTE: save_memory does NOT work for DDP.
         # Under DDP, computing loss_tea and loss_adv independently using loss_teacher and loss_adversarial
@@ -136,7 +136,7 @@ class TeachAugment(nn.Module):
             x = self.normalizer(x)
         # calculate loss
         tar_pred = self.model(x)
-        loss_adv = self.adv_criterion(tar_pred, y)
+        loss_adv = self.adv_criterion(tar_pred, y) # NonSaturatingLoss
         # accuracy
         with torch.no_grad():
             acc = (tar_pred.argmax(1) == y).float().mean()

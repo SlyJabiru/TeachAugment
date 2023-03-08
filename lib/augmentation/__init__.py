@@ -20,6 +20,13 @@ def get_transforms(dataset):
                                    T.Resize((224, 224), interpolation=T.InterpolationMode.BICUBIC),
                                    T.ToTensor(),
                                    normalizer])
+    elif dataset == 'MNIST':
+        normalizer = T.Normalize((0.1307,), (0.3081,))
+        train_transform = T.Compose([T.RandomCrop(28, padding=4),
+                                     T.ToTensor()])
+        base_aug = [normalizer,
+                    cutout.Cutout(size=14)]
+        val_transform = T.Compose([T.ToTensor(), normalizer])
     else:
         normalizer = T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
         train_transform = T.Compose([T.RandomCrop(32, padding=4),
@@ -31,12 +38,12 @@ def get_transforms(dataset):
     return base_aug, train_transform, val_transform, normalizer
 
 
-def build_augmentation(n_classes,
+def build_augmentation(n_classes, n_channel,
                        g_offset, g_scale, g_scale_unlimited,
                        c_scale, c_scale_unlimited, c_shift_unlimited,
                        c_reg_coef=0, normalizer=None, replay_buffer=None,
                        n_chunk=16, with_context=True):
     g_aug = nn_aug.GeometricAugmentation(n_classes, g_offset, g_scale, g_scale_unlimited, with_context=with_context)
-    c_aug = nn_aug.ColorAugmentation(n_classes, c_scale, c_scale_unlimited, c_shift_unlimited, with_context=with_context)
+    c_aug = nn_aug.ColorAugmentation(n_classes, n_channel, c_scale, c_scale_unlimited, c_shift_unlimited, with_context=with_context)
     augmentation = augmentation_container.AugmentationContainer(c_aug, g_aug, c_reg_coef, normalizer, replay_buffer, n_chunk)
     return augmentation

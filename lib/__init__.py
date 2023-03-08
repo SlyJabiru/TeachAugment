@@ -9,11 +9,15 @@ def build_dataset(dataset_name, root, train_transform=None, val_transform=None):
         train_transform = T.Compose([T.ToTensor()])
     if val_transform is None:
         val_transform = T.Compose([T.ToTensor()])
-    if dataset_name != 'ImageNet':
+    if 'CIFAR' in dataset_name:
         train_data = D.__dict__[dataset_name](root, download=True, transform=train_transform)
         test_data = D.__dict__[dataset_name](root, train=False, transform=val_transform)
         n_classes = 10 if dataset_name == 'CIFAR10' else 100
-    else:
+    elif dataset_name == 'MNIST':
+        train_data = D.MNIST(root, train=True, download=True, transform=train_transform)
+        test_data = D.MNIST(root, train=False, transform=val_transform)
+        n_classes = 10
+    else: # ImageNet
         train_data = D.ImageFolder(os.path.join(root, 'train'), train_transform)
         test_data = D.ImageFolder(os.path.join(root, 'val'), val_transform)
         n_classes = 1000

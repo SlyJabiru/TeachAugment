@@ -6,6 +6,9 @@ import logging
 
 import torch
 
+import wandb
+import numpy as np
+
 
 def set_seed(seed):
     import random
@@ -116,7 +119,12 @@ class AvgMeter:
         self.ema_params = {}
         self.sum_params = {}
         self.counter = {}
-
+    
+    def make_avg_dict(self):
+        avg_dict = {}
+        for k, v in self.sum_params.items():
+            avg_dict[k] = v / self.counter[k]
+        return avg_dict
 
 def override_config(args, dict_param):
     for k, v in dict_param.items():
@@ -137,3 +145,22 @@ def load_json(path):
     with open(path, 'r') as f:
         d = json.load(f)
     return d
+
+
+def fill_wandb_table(images, augmented, gt, target_pred, teacher_pred, image_table):
+    images = images.detach().cpu().numpy()
+    augmented = augmented.detach().cpu().numpy()
+    gt = gt.detach().cpu().numpy()
+    target_pred = target_pred.detach().cpu().numpy()
+    teacher_pred = teacher_pred.detach().cpu().numpy()
+
+    indices_gt_tgt = np.where(gt != target_pred)[0]
+    indices_tgt_tea = np.where(target_pred != teacher_pred)[0]
+
+    problematic_indices = list(set(list(indices_gt_tgt) + list(indices_tgt_tea)))
+
+    for idx in problematic_indices:
+        image_table.add_data(wandb.Image(images[idx]), wandb.Image(augmented[idx]), gt[idx], target_pred[idx], teacher_pred[idx])
+
+    for img, aug, g, tgt_pred, tea_pred in zip(images[0:3], augmented[0:3], gt[0:3], target_pred[0:3], teacher_pred[0:3]):
+        image_table.add_data(wandb.Image(img), wandb.Image(aug), g, tgt_pred, tea_pred)

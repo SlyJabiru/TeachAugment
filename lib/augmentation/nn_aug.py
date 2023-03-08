@@ -28,7 +28,7 @@ class TriangleWave(torch.autograd.Function):
 
 
 class ColorAugmentation(nn.Module):
-    def __init__(self, n_classes=10, scale=1, c_scale_unlimited=False, c_shift_unlimited=False, hidden=128, n_dim=128, dropout_ratio=0.8, with_context=True):
+    def __init__(self, n_classes=10, n_channel=3, scale=1, c_scale_unlimited=False, c_shift_unlimited=False, hidden=128, n_dim=128, dropout_ratio=0.8, with_context=True):
         super().__init__()
 
         n_hidden = 4 * n_dim
@@ -43,7 +43,7 @@ class ColorAugmentation(nn.Module):
         else:
             self.context_layer = None
         # embedding layer for RGB
-        self.color_enc1 = conv(3, hidden, 1)
+        self.color_enc1 = conv(n_channel, hidden, 1)
         # body for RGB
         self.color_enc_body = nn.Sequential(
             bn2d(hidden),
@@ -55,7 +55,7 @@ class ColorAugmentation(nn.Module):
             nn.Dropout2d(dropout_ratio) if dropout_ratio > 0 else nn.Sequential()
         )
         # output layer for RGB
-        self.c_regress = conv(hidden, 6, 1)
+        self.c_regress = conv(hidden, 2*n_channel, 1)
         # body for noise vector
         self.noise_enc = nn.Sequential(
             linear(n_dim + n_classes if with_context else n_dim, n_hidden),
@@ -151,14 +151,17 @@ class ColorAugmentation(nn.Module):
         nn.init.constant_(self.logits, 0)
 
     def transform(self, x, scale, shift):
+        # print(f'x.shape in c_aug.transform: {x.shape}') # torch.Size([128, 1, 28, 28])
         # ignore zero padding region
         with torch.no_grad():
             h, w = x.shape[-2:]
             mask = (x.sum(1, keepdim=True) == 0).float() # mask pixels having (0, 0, 0) color
             mask = torch.logical_and(mask.sum(-1, keepdim=True) < w,
                                      mask.sum(-2, keepdim=True) < h) # mask zero padding region
-
+        
         x = (scale * x + shift) * mask
+        # print(f'x.shape in after x = (scale * x + shift) * mask: {x.shape}') # torch.Size([128, 1, 28, 28])
+        # print()
         return TriangleWave.apply(x)
         
 
@@ -234,7 +237,7 @@ class GeometricAugmentation(nn.Module):
         A = self.sampling(A, c)
         # matrix to grid representation
         grid = nn.functional.affine_grid(A, x.shape)
-        return grid
+        return grid, A
 
     def reset(self):
         for m in self.modules():

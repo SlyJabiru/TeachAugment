@@ -3,9 +3,12 @@ import torch.nn as nn
 
 
 def slicd_Wasserstein_distance(x1, x2, n_projection=128):
+    n_channel = x1.shape[1]
+    # print(f'x1.shape: {x1.shape} in slicd_Wasserstein_distance') # torch.Size([128, 1, 28, 28])
+    # print(f'x2.shape: {x2.shape} in slicd_Wasserstein_distance') # torch.Size([128, 1, 28, 28])
     x1 = x1.flatten(-2).transpose(1, 2).contiguous() # (b, 3, h, w) -> (b, n, 3)
     x2 = x2.flatten(-2).transpose(1, 2).contiguous()
-    rand_proj = torch.randn(3, n_projection, device=x1.device)
+    rand_proj = torch.randn(n_channel, n_projection, device=x1.device)
     rand_proj = rand_proj / (rand_proj.norm(2, dim=0, keepdim=True) + 1e-12)
     sorted_proj_x1 = torch.matmul(x1, rand_proj).sort(0)[0]
     sorted_proj_x2 = torch.matmul(x2, rand_proj).sort(0)[0]
@@ -24,17 +27,19 @@ class AugmentationContainer(nn.Module):
         self.replay_buffer = replay_buffer
         self.n_chunk = n_chunk
 
-    def get_params(self, x, c, c_aug, g_aug):
+    def get_params(self, x, c, c_aug=None, g_aug=None):
         # sample noise vector from unit gauss
         noise = x.new(x.shape[0], self.g_aug.n_dim).normal_()
         target = self.normalizer(x) if self.normalizer is not None else x
         # sample augmentation parameters
-        grid = g_aug(target, noise, c)
+        c_aug = self.c_aug if c_aug is None else c_aug
+        g_aug = self.g_aug if g_aug is None else g_aug
+        grid, A = g_aug(target, noise, c)
         scale, shift = c_aug(target, noise, c)
-        return (scale, shift), grid
+        return (scale, shift), grid, A
 
     def augmentation(self, x, c, c_aug, g_aug, update=False):
-        c_param, g_param = self.get_params(x, c, c_aug, g_aug)
+        c_param, g_param, A = self.get_params(x, c, c_aug, g_aug)
         # color augmentation
         aug_x = c_aug.transform(x, *c_param)
         # color regularization
@@ -50,6 +55,7 @@ class AugmentationContainer(nn.Module):
         return aug_x, swd
 
     def forward(self, x, c, update=False):
+        # print(f'x.shape: {x.shape} in augmentation container forward') # torch.Size([128, 1, 28, 28])
         if update or self.replay_buffer is None or len(self.replay_buffer) == 0:
             x, swd = self.augmentation(x, c, self.c_aug, self.g_aug, update)
         else:

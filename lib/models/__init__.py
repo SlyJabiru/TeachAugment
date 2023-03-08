@@ -4,12 +4,12 @@ from . import wide_resnet
 from .shakeshake import shake_resnet
 
 
-def build_model(model_name, num_classes=10):
+def build_model(model_name, num_classes=10, n_channel=3):
     if model_name in ['wideresnet-28-10', 'wrn-28-10']:
-        model = wide_resnet.WideResNet(28, 10, 0, num_classes)
+        model = wide_resnet.WideResNet(28, 10, 0, num_classes, n_channel)
 
     elif model_name in ['wideresnet-40-2', 'wrn-40-2']:
-        model = wide_resnet.WideResNet(40, 2, 0, num_classes)
+        model = wide_resnet.WideResNet(40, 2, 0, num_classes, n_channel)
 
     elif model_name in ['shakeshake26_2x32d', 'ss32']:
         model = shake_resnet.ShakeResNet(26, 32, num_classes)
