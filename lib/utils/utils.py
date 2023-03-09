@@ -149,7 +149,9 @@ def load_json(path):
 
 def fill_wandb_table(images, augmented, gt, target_pred, teacher_pred, image_table):
     images = images.detach().cpu().numpy()
+    images = np.transpose(images, (0, 2, 3, 1))
     augmented = augmented.detach().cpu().numpy()
+    augmented = np.transpose(augmented, (0, 2, 3, 1))
     gt = gt.detach().cpu().numpy()
     target_pred = target_pred.detach().cpu().numpy()
     teacher_pred = teacher_pred.detach().cpu().numpy()
