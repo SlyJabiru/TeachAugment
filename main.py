@@ -51,10 +51,23 @@ def main(args):
     # EMA Teacher
     avg_fn = lambda averaged_model_parameter, model_parameter, num_averaged: \
                 args.ema_rate * averaged_model_parameter + (1 - args.ema_rate) * model_parameter
-    ema_model = optim.swa_utils.AveragedModel(model, avg_fn=avg_fn)
+    
+    if args.fixed_teacher:
+        print(f'Make fixed teacher model')
+        ema_model = build_model(args.model, n_classes, n_channel)
+        ema_model.load_state_dict(torch.load(args.fixed_teacher))
+        ema_model = ema_model.to(device)
+
+        fixed_model_for_check = build_model(args.model, n_classes, n_channel)
+        fixed_model_for_check.load_state_dict(torch.load(args.fixed_teacher))
+        fixed_model_for_check = fixed_model_for_check.to(device)
+    else:
+        print(f'Make EMA Teacher')
+        ema_model = optim.swa_utils.AveragedModel(model, avg_fn=avg_fn)
     for ema_p in ema_model.parameters():
         ema_p.requires_grad_(False)
     ema_model.train()
+
     # Trainable Augmentation
     rbuffer = augmentation.replay_buffer.ReplayBuffer(args.rb_decay)
     trainable_aug = augmentation.build_augmentation(n_classes, n_channel,
@@ -145,7 +158,9 @@ def main(args):
             else:
                 context = targets
             # update teacher model
-            ema_model.update_parameters(model)
+            if not args.fixed_teacher:
+                print(f'Update teacher')
+                ema_model.update_parameters(model)
             # Update augmentation
             if i % args.n_inner == 0:
                 optim_aug.zero_grad()
@@ -219,7 +234,7 @@ def main(args):
             eval_meter = utils.AvgMeter()
             model.eval()
             ema_model.eval()
-            n_samples = len(eval_loader)
+            n_samples = len(eval_data)
             with torch.no_grad():
                 for data in eval_loader:
                     input, target = data
@@ -262,7 +277,7 @@ def main(args):
         ema_model_acc1, ema_model_acc5 = 0, 0
         model.eval()
         ema_model.eval()
-        n_samples = len(eval_loader)
+        n_samples = len(eval_data)
         eval_meter = utils.AvgMeter()
 
         with torch.no_grad():
@@ -273,7 +288,7 @@ def main(args):
 
                 model_pred = model(input)
                 model_eval_loss = F.cross_entropy(model_pred, target)
-                model_eval_accs = utils.accuracy(model_pred, target, (1, 5))
+                model_eval_accs = utils.accuracy(model_pred, target, (1, 5)) # if res = [8.59], accuracy is 8 %
 
                 ema_model_pred = ema_model(input)
                 ema_model_eval_loss = F.cross_entropy(ema_model_pred, target)
@@ -323,6 +338,7 @@ if __name__ == '__main__':
                         help='/path/to/dataset')
     # Model
     parser.add_argument('--model', default='wrn-28-10', type=str)
+    parser.add_argument('--fixed_teacher', default='', type=str)
     # Optimization
     parser.add_argument('--lr', default=0.1, type=float,
                         help='learning rate')
@@ -420,7 +436,7 @@ if __name__ == '__main__':
     if args.dist:
         utils.setup_ddp(args)
 
-    wandb_name = args.dataset + '-' + 'original' + '-' + now
+    wandb_name = args.dataset + '-' + now
     wandb.init(
         project=args.wandb_project,
         name=wandb_name,
