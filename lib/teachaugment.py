@@ -22,6 +22,7 @@ class TeachAugment(nn.Module):
     def __init__(
             self, model, ema_model,
             trainable_aug, adv_criterion,
+            teacher_loss_coeff=1.0,
             weight_decay=0, base_aug=None,
             normalizer=None, save_memory=False):
         super().__init__()
@@ -31,6 +32,7 @@ class TeachAugment(nn.Module):
         # loss
         self.adv_criterion = adv_criterion
         self.weight_decay = weight_decay
+        self.teacher_loss_coeff = teacher_loss_coeff
         # augmentation
         self.trainable_aug = trainable_aug
         self.base_aug = base_aug
@@ -109,6 +111,7 @@ class TeachAugment(nn.Module):
             x.backward(grad, retain_graph=True)
         tea_pred = self.ema_model(x)
         loss_tea = F.cross_entropy(tea_pred, y)
+        loss_tea = loss_tea * self.teacher_loss_coeff
         # accuracy
         with torch.no_grad():
             teacher_acc = (tea_pred.argmax(1) == y).float().mean()

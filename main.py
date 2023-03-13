@@ -20,6 +20,7 @@ from lib.models import build_model
 from lib.losses import non_saturating_loss
 
 import wandb
+import numpy as np
 
 def main(args):
     main_process = args.local_rank == 0
@@ -121,7 +122,7 @@ def main(args):
     # Objective function
     adv_criterion = non_saturating_loss.NonSaturatingLoss(args.epsilon)
     objective = teachaugment.TeachAugment(model, ema_model, trainable_aug,
-                                          adv_criterion, args.weight_decay,
+                                          adv_criterion, args.teacher_loss_coeff, args.weight_decay,
                                           base_aug, normalizer, not args.dist and args.save_memory).to(device)
     # DDP
     if args.dist:
@@ -225,10 +226,90 @@ def main(args):
             #               'scheduler': scheduler.state_dict(),
             #               'epoch': epoch}
             # torch.save(checkpoint, os.path.join(args.log_dir, 'checkpoint.pth'))
+
+        # Check parameter and gradients of the target model and augmentation model
+        if epoch % args.n_check_norm == 0:
+            if args.fixed_teacher:
+                for p1, p2 in zip(ema_model.parameters(), fixed_model_for_check.parameters()):
+                    if p1.data.ne(p2.data).sum() > 0:
+                        print(f'The teacher model is not fixed!')
+                        print(f'p1.data.ne(p2.data).sum(): {p1.data.ne(p2.data).sum()}')
+
+            sum_norm_model = 0.0
+            sum_norm_grad_model = 0.0
+            for name, param in model.named_parameters():
+                sum_norm_model += torch.linalg.norm(param).item() if param is not None else 0.0
+                sum_norm_grad_model += torch.linalg.norm(param.grad).item() if param.grad is not None else 0.0
+
+            sum_norm_c_aug = 0.0
+            sum_norm_grad_c_aug = 0.0
+            sum_norm_g_aug = 0.0
+            sum_norm_grad_g_aug = 0.0
+            for name, param in trainable_aug.named_parameters():
+                # print(f'name: {name}')
+                if 'c_aug' in name:
+                    sum_norm_c_aug += torch.linalg.norm(param).item() if param is not None else 0.0
+                    sum_norm_grad_c_aug += torch.linalg.norm(param.grad).item() if param.grad is not None else 0.0
+                elif 'g_aug' in name:
+                    sum_norm_g_aug += torch.linalg.norm(param).item() if param is not None else 0.0
+                    sum_norm_grad_g_aug += torch.linalg.norm(param.grad).item() if param.grad is not None else 0.0
+                else:
+                    pass
+
+            wandb.log({
+                'step': epoch,
+                'train/norm_model': sum_norm_model,
+                'train/norm_grad_model': sum_norm_grad_model,
+                'train/norm_c_aug': sum_norm_c_aug,
+                'train/norm_grad_c_aug': sum_norm_grad_c_aug,
+                'train/norm_g_aug': sum_norm_g_aug,
+                'train/norm_grad_g_aug': sum_norm_grad_g_aug,
+            })
+
+        # Check augmentation parameters time to time
+        # TODO: Here? because of trainable_aug.get_params(inputs, context)??
+        if epoch % args.n_check_aug_param == 0:
+            with torch.no_grad():
+                c_param, g_param, A = trainable_aug.get_params(inputs, context)
+                scale = c_param[0] # scale should go to 1 to make identity function
+                shift = c_param[1] # shift should go to 0 to make identity function
+                # A should go to [[1, 0, 0], [0, 1, 0]]^T to make identity function
+
+                A_mean = torch.mean(A, dim=0) # torch.Size([2, 3])
+                A_txt_path = os.path.join(args.log_dir, f'{epoch}_A.txt')
+                np.savetxt(A_txt_path, A_mean.detach().cpu().numpy(), fmt='%.3f')
+
+                artifact = wandb.Artifact(f'aug-affine-matrix', type='dataset')
+                artifact.add_file(A_txt_path, f'{epoch}_A.txt')
+                wandb.log_artifact(artifact)
+
+                identity = torch.Tensor([[1,0,0],[0,1,0]]).to(device)
+            wandb.log({
+                'step': epoch,
+                'd1(A, I)': (A_mean - identity).abs().sum().item(),
+                'scale': torch.mean(scale).item(),
+                'shift': torch.mean(shift).item(),
+            })
+
         # Save augmented images
-        if args.vis:
-            save_image(aug_img, os.path.join(args.log_dir, f'{epoch}epoch_aug_img.png'))
-            save_image(inputs, os.path.join(args.log_dir, f'{epoch}epoch_img.png'))
+        if epoch % args.n_save_image == 0:
+            columns=['image', 'augmented', 'gt', 'target_pred', 'teacher_pred']
+            image_table = wandb.Table(columns=columns)
+
+            with torch.no_grad():
+                outputs = model(aug_img)
+                _, target_pred = torch.max(outputs.data, 1)
+                outputs = ema_model(aug_img)
+                _, teacher_pred = torch.max(outputs.data, 1)
+
+            utils.fill_wandb_table(inputs, aug_img, targets,
+                                   target_pred, teacher_pred,
+                                   image_table)
+            wandb.log({f'{epoch}_image_table' : image_table})
+
+            # save_image(aug_img, os.path.join(args.log_dir, f'{epoch}epoch_aug_img.png'))
+            # save_image(inputs, os.path.join(args.log_dir, f'{epoch}epoch_img.png'))
+
 
         if epoch % args.n_eval == 0:
             eval_meter = utils.AvgMeter()
@@ -288,7 +369,7 @@ def main(args):
 
                 model_pred = model(input)
                 model_eval_loss = F.cross_entropy(model_pred, target)
-                model_eval_accs = utils.accuracy(model_pred, target, (1, 5)) # if res = [8.59], accuracy is 8 %
+                model_eval_accs = utils.accuracy(model_pred, target, (1, 5))
 
                 ema_model_pred = ema_model(input)
                 ema_model_eval_loss = F.cross_entropy(ema_model_pred, target)
@@ -343,6 +424,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.1, type=float,
                         help='learning rate')
     parser.add_argument('--weight_decay', '-wd', default=5e-4, type=float)
+    parser.add_argument('--teacher_loss_coeff', default=1.0, type=float)
     parser.add_argument('--n_epochs', default=200, type=int)
     parser.add_argument('--batch_size', '-bs', default=128, type=int)
     parser.add_argument('--aug_lr', default=1e-3, type=float,
@@ -396,8 +478,8 @@ if __name__ == '__main__':
                         help='resume training')
     parser.add_argument('--num_workers', '-j', default=8, type=int,
                         help='the number of data loading workers')
-    parser.add_argument('--vis', action='store_true',
-                        help='visualize augmented images')
+    # parser.add_argument('--vis', action='store_true',
+    #                     help='visualize augmented images')
     parser.add_argument('--save_memory', action='store_true',
                         help='independently calculate adversarial loss \
                             and teacher loss for saving memory')
@@ -408,7 +490,8 @@ if __name__ == '__main__':
 
     # Logging
     parser.add_argument('--wandb_project', default='safe-aug', type=str, help='a string to use as a wandb project name.')
-    parser.add_argument('--wandb_store_image', action='store_true', help='a flag whether images are saved in wandb or not')
+    parser.add_argument('--wandb_str', default='', type=str, help='a string to use in wandb run name.')
+    # parser.add_argument('--wandb_store_image', action='store_true', help='a flag whether images are saved in wandb or not')
     parser.add_argument('--n_check_aug_param', default=5, type=int, help='an integer indicating how frequently augmentation parameters are checked.')
     parser.add_argument('--n_eval', default=5, type=int, help='an integer indicating how frequently evaluations are done during training.')
     parser.add_argument('--n_save_image', default=5, type=int, help='an integer indicating how frequently images are saved during training.')
@@ -436,10 +519,11 @@ if __name__ == '__main__':
     if args.dist:
         utils.setup_ddp(args)
 
-    wandb_name = args.dataset + '-' + now
+    wandb_name = args.dataset + '-' + args.wandb_str + '-' + now
     wandb.init(
         project=args.wandb_project,
         name=wandb_name,
+        save_code=True
         # sync_tensorboard=True
     )
     wandb.config.update(args)
