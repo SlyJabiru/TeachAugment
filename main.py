@@ -160,7 +160,7 @@ def main(args):
                 context = targets
             # update teacher model
             if not args.fixed_teacher:
-                print(f'Update teacher')
+                # print(f'Update teacher')
                 ema_model.update_parameters(model)
             # Update augmentation
             if i % args.n_inner == 0:
