@@ -56,7 +56,7 @@ n_channel = 1 if args.dataset == 'MNIST' else 3
 model = build_model('wrn-28-10', n_classes, n_channel).to(device)
 
 lr = 0.005
-num_epochs = 200
+num_epochs = 300
 optimizer = optim.Adam(model.parameters(), lr=lr)
 loss_function = nn.CrossEntropyLoss().to(device)
 
