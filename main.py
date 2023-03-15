@@ -148,6 +148,7 @@ def main(args):
     for epoch in range(st_epoch, args.n_epochs + 1):
         model.train()
         ema_model.train()
+        trainable_aug.train()
         if args.dist:
             train_loader.sampler.set_epoch(epoch)
         for i, data in enumerate(train_loader):
@@ -270,6 +271,7 @@ def main(args):
         # TODO: Here? because of trainable_aug.get_params(inputs, context)??
         if epoch % args.n_check_aug_param == 0:
             with torch.no_grad():
+                trainable_aug.eval()
                 c_param, g_param, A = trainable_aug.get_params(inputs, context)
                 scale = c_param[0] # scale should go to 1 to make identity function
                 shift = c_param[1] # shift should go to 0 to make identity function
@@ -292,18 +294,25 @@ def main(args):
             })
 
         # Save augmented images
-        if epoch % args.n_save_image == 0:
+        # TODO: because of this??
+        print(f'args.wandb_store_image: {args.wandb_store_image}')
+        if args.wandb_store_image and epoch % args.n_save_image == 0:
+            print(f'save image on wandb...')
             columns=['image', 'augmented', 'gt', 'target_pred', 'teacher_pred']
             image_table = wandb.Table(columns=columns)
 
             with torch.no_grad():
-                outputs = model(aug_img)
-                _, target_pred = torch.max(outputs.data, 1)
-                outputs = ema_model(aug_img)
-                _, teacher_pred = torch.max(outputs.data, 1)
+                model.eval()
+                ema_model.eval()
+                trainable_aug.eval()
+
+                outputs_model = model(aug_img)
+                _, pred_model = torch.max(outputs_model.data, 1)
+                outputs_teacher = ema_model(aug_img)
+                _, pred_teacher = torch.max(outputs_teacher.data, 1)
 
             utils.fill_wandb_table(inputs, aug_img, targets,
-                                   target_pred, teacher_pred,
+                                   pred_model, pred_teacher,
                                    image_table)
             wandb.log({f'{epoch}_image_table' : image_table})
 
@@ -315,6 +324,7 @@ def main(args):
             eval_meter = utils.AvgMeter()
             model.eval()
             ema_model.eval()
+            trainable_aug.eval()
             n_samples = len(eval_data)
             with torch.no_grad():
                 for data in eval_loader:
@@ -491,7 +501,7 @@ if __name__ == '__main__':
     # Logging
     parser.add_argument('--wandb_project', default='safe-aug', type=str, help='a string to use as a wandb project name.')
     parser.add_argument('--wandb_str', default='', type=str, help='a string to use in wandb run name.')
-    # parser.add_argument('--wandb_store_image', action='store_true', help='a flag whether images are saved in wandb or not')
+    parser.add_argument('--wandb_store_image', action='store_true', help='a flag whether images are saved in wandb or not')
     parser.add_argument('--n_check_aug_param', default=5, type=int, help='an integer indicating how frequently augmentation parameters are checked.')
     parser.add_argument('--n_eval', default=5, type=int, help='an integer indicating how frequently evaluations are done during training.')
     parser.add_argument('--n_save_image', default=5, type=int, help='an integer indicating how frequently images are saved during training.')
@@ -526,6 +536,7 @@ if __name__ == '__main__':
         save_code=True
         # sync_tensorboard=True
     )
+    wandb.run.log_code(".")
     wandb.config.update(args)
 
     main(args)
