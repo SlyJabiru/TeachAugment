@@ -127,7 +127,7 @@ def main(args):
     # DDP
     if args.dist:
         objective = torch.nn.parallel.DistributedDataParallel(objective, device_ids=[args.local_rank],
-                                                            #   find_unused_parameters=True,
+                                                              find_unused_parameters=True,
                                                               output_device=args.local_rank)
     # Resume
     st_epoch = 1
