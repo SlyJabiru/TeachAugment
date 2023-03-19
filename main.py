@@ -146,6 +146,7 @@ def main(args):
     if main_process:
         logger.info('training')
     meter = utils.AvgMeter()
+    num_update_aug = 0
     for epoch in range(st_epoch, args.n_epochs + 1):
         model.train()
         ema_model.train()
@@ -166,6 +167,10 @@ def main(args):
                 ema_model.update_parameters(model)
             # Update augmentation
             if i % args.n_inner == 0:
+                if main_process:
+                    num_update_aug += 1
+                    print(f'num_update_aug: {num_update_aug}')
+
                 optim_aug.zero_grad()
                 if args.dist and args.save_memory: # computating gradient independently for saving memory
                     loss_adv, c_reg, acc_tar = objective(inputs, targets, context, 'loss_adv')
@@ -488,7 +493,7 @@ if __name__ == '__main__':
                         help='disable cudnn for reproducibility')
     parser.add_argument('--resume', action='store_true',
                         help='resume training')
-    parser.add_argument('--num_workers', '-j', default=8, type=int,
+    parser.add_argument('--num_workers', '-j', default=16, type=int,
                         help='the number of data loading workers')
     # parser.add_argument('--vis', action='store_true',
     #                     help='visualize augmented images')
@@ -541,6 +546,7 @@ if __name__ == '__main__':
         )
         wandb.run.log_code(".")
         wandb.config.update(args)
+        # wandb.define_metric("val_accuracy", step_metric="epoch")
     if args.dist:
         utils.setup_ddp(args)
 
