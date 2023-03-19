@@ -127,7 +127,8 @@ def main(args):
     # DDP
     if args.dist:
         objective = torch.nn.parallel.DistributedDataParallel(objective, device_ids=[args.local_rank],
-                                                              output_device=args.local_rank, find_unused_parameters=True)
+                                                              find_unused_parameters=True,
+                                                              output_device=args.local_rank)
     # Resume
     st_epoch = 1
     if args.resume:
@@ -145,6 +146,7 @@ def main(args):
     if main_process:
         logger.info('training')
     meter = utils.AvgMeter()
+    num_update_aug = 0
     for epoch in range(st_epoch, args.n_epochs + 1):
         model.train()
         ema_model.train()
@@ -165,6 +167,10 @@ def main(args):
                 ema_model.update_parameters(model)
             # Update augmentation
             if i % args.n_inner == 0:
+                if main_process:
+                    num_update_aug += 1
+                    print(f'num_update_aug: {num_update_aug}')
+
                 optim_aug.zero_grad()
                 if args.dist and args.save_memory: # computating gradient independently for saving memory
                     loss_adv, c_reg, acc_tar = objective(inputs, targets, context, 'loss_adv')
@@ -197,19 +203,20 @@ def main(args):
             #                             f'lr {optim_cls.param_groups[0]["lr"]:.4e}'))
 
         # Log performances each epoch
-        avg_dict = meter.make_avg_dict()
-        print(avg_dict)
-        loss_aug = avg_dict['loss adv.'] + avg_dict['loss teacher'] + avg_dict['color reg.'] # 이 크기가 작다.
-        wandb.log({
-            'step': epoch,
-            'train/loss_adv': avg_dict['loss adv.'], # 작다. 키우고 싶지만, 안 커진다.
-            'train/loss_tea': avg_dict['loss teacher'], # 크다. 작게 하고 싶지만, 크다.
-            'train/loss_color': avg_dict['color reg.'],
-            'train/loss_aug': loss_aug, # 작다.
-            'train/acc_adv': avg_dict['acc.'],
-            'train/acc_tea': avg_dict['acc. teacher'],
-            'train/loss_cls': avg_dict['loss cls.'],
-        })
+        if main_process:
+            avg_dict = meter.make_avg_dict()
+            print(avg_dict)
+            loss_aug = avg_dict['loss adv.'] + avg_dict['loss teacher'] + avg_dict['color reg.'] # 이 크기가 작다.
+            wandb.log({
+                'step': epoch,
+                'train/loss_adv': avg_dict['loss adv.'], # 작다. 키우고 싶지만, 안 커진다.
+                'train/loss_tea': avg_dict['loss teacher'], # 크다. 작게 하고 싶지만, 크다.
+                'train/loss_color': avg_dict['color reg.'],
+                'train/loss_aug': loss_aug, # 작다.
+                'train/acc_adv': avg_dict['acc.'],
+                'train/acc_tea': avg_dict['acc. teacher'],
+                'train/loss_cls': avg_dict['loss cls.'],
+            })
 
         # Store augmentation in buffer
         if args.sampling_freq > 0 and epoch % args.sampling_freq == 0:
@@ -229,7 +236,7 @@ def main(args):
             # torch.save(checkpoint, os.path.join(args.log_dir, 'checkpoint.pth'))
 
         # Check parameter and gradients of the target model and augmentation model
-        if epoch % args.n_check_norm == 0:
+        if main_process and epoch % args.n_check_norm == 0:
             if args.fixed_teacher:
                 for p1, p2 in zip(ema_model.parameters(), fixed_model_for_check.parameters()):
                     if p1.data.ne(p2.data).sum() > 0:
@@ -269,7 +276,7 @@ def main(args):
 
         # Check augmentation parameters time to time
         # TODO: Here? because of trainable_aug.get_params(inputs, context)??
-        if epoch % args.n_check_aug_param == 0:
+        if main_process and epoch % args.n_check_aug_param == 0:
             with torch.no_grad():
                 trainable_aug.eval()
                 c_param, g_param, A = trainable_aug.get_params(inputs, context)
@@ -295,8 +302,8 @@ def main(args):
 
         # Save augmented images
         # TODO: because of this??
-        print(f'args.wandb_store_image: {args.wandb_store_image}')
-        if args.wandb_store_image and epoch % args.n_save_image == 0:
+        # print(f'args.wandb_store_image: {args.wandb_store_image}')
+        if main_process and args.wandb_store_image and epoch % args.n_save_image == 0:
             print(f'save image on wandb...')
             columns=['image', 'augmented', 'gt', 'target_pred', 'teacher_pred']
             image_table = wandb.Table(columns=columns)
@@ -320,7 +327,7 @@ def main(args):
             # save_image(inputs, os.path.join(args.log_dir, f'{epoch}epoch_img.png'))
 
 
-        if epoch % args.n_eval == 0:
+        if main_process and epoch % args.n_eval == 0:
             eval_meter = utils.AvgMeter()
             model.eval()
             ema_model.eval()
@@ -486,7 +493,7 @@ if __name__ == '__main__':
                         help='disable cudnn for reproducibility')
     parser.add_argument('--resume', action='store_true',
                         help='resume training')
-    parser.add_argument('--num_workers', '-j', default=8, type=int,
+    parser.add_argument('--num_workers', '-j', default=16, type=int,
                         help='the number of data loading workers')
     # parser.add_argument('--vis', action='store_true',
     #                     help='visualize augmented images')
@@ -499,7 +506,7 @@ if __name__ == '__main__':
                         help='given path to .json, parse from .json')
 
     # Logging
-    parser.add_argument('--wandb_project', default='safe-aug', type=str, help='a string to use as a wandb project name.')
+    parser.add_argument('--wandb_project', default='TeachAugment', type=str, help='a string to use as a wandb project name.')
     parser.add_argument('--wandb_str', default='', type=str, help='a string to use in wandb run name.')
     parser.add_argument('--wandb_store_image', action='store_true', help='a flag whether images are saved in wandb or not')
     parser.add_argument('--n_check_aug_param', default=5, type=int, help='an integer indicating how frequently augmentation parameters are checked.')
@@ -519,24 +526,28 @@ if __name__ == '__main__':
 
     utils.set_seed(args.seed)
 
-    now = datetime.datetime.now().strftime("%Y%m%d-%H:%M:%S")
-    args.log_dir = os.path.join(args.log_dir, now)
-    if not os.path.exists(args.log_dir):
-        os.makedirs(args.log_dir) 
+    # now = datetime.datetime.now().strftime("%Y%m%d-%H:%M:%S")
+    # args.log_dir = os.path.join(args.log_dir, now)
+    # if not os.path.exists(args.log_dir):
+    #     os.makedirs(args.log_dir) 
 
     if args.local_rank == 0:
+        now = datetime.datetime.now().strftime("%Y%m%d-%H:%M:%S")
+        args.log_dir = os.path.join(args.log_dir, now)
+
         utils.setup_logger(args.log_dir, args.resume)
+        
+        wandb_name = args.dataset + '-' + args.wandb_str + '-' + now
+        wandb.init(
+            project=args.wandb_project,
+            name=wandb_name,
+            save_code=True
+            # sync_tensorboard=True
+        )
+        wandb.run.log_code(".")
+        wandb.config.update(args)
+        # wandb.define_metric("val_accuracy", step_metric="epoch")
     if args.dist:
         utils.setup_ddp(args)
-
-    wandb_name = args.dataset + '-' + args.wandb_str + '-' + now
-    wandb.init(
-        project=args.wandb_project,
-        name=wandb_name,
-        save_code=True
-        # sync_tensorboard=True
-    )
-    wandb.run.log_code(".")
-    wandb.config.update(args)
 
     main(args)

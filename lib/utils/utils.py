@@ -160,6 +160,7 @@ def fill_wandb_table(images, augmented, gt, target_pred, teacher_pred, image_tab
     indices_tgt_tea = np.where(target_pred != teacher_pred)[0]
 
     problematic_indices = list(set(list(indices_gt_tgt) + list(indices_tgt_tea)))
+    problematic_indices = problematic_indices[0:min(10, len(problematic_indices))]
 
     for idx in problematic_indices:
         image_table.add_data(wandb.Image(images[idx]), wandb.Image(augmented[idx]), gt[idx], target_pred[idx], teacher_pred[idx])
