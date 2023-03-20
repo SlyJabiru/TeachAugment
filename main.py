@@ -40,6 +40,12 @@ def main(args):
     # Dataset
     base_aug, train_trans, val_trans, normalizer = augmentation.get_transforms(args.dataset)
     train_data, eval_data, n_classes = build_dataset(args.dataset, args.root, train_trans, val_trans)
+    print(f'len(subset_train) before fraction: {len(train_data)}')
+
+    subset_indices = list(range(0, len(train_data), args.data_fraction))
+    train_data = torch.utils.data.Subset(train_data, subset_indices)
+    print(f'len(subset_train) after fraction: {len(train_data)}')
+
     sampler = torch.utils.data.DistributedSampler(train_data, num_replicas=args.world_size, rank=args.local_rank) if args.dist else None
     train_loader = DataLoader(train_data, args.batch_size, not args.dist, sampler,
                               num_workers=args.num_workers, pin_memory=True,
@@ -147,6 +153,7 @@ def main(args):
         logger.info('training')
     meter = utils.AvgMeter()
     num_update_aug = 0
+    global_iter_idx = 0
     for epoch in range(st_epoch, args.n_epochs + 1):
         model.train()
         ema_model.train()
@@ -165,8 +172,10 @@ def main(args):
             if not args.fixed_teacher:
                 # print(f'Update teacher')
                 ema_model.update_parameters(model)
+            
+            global_iter_idx += 1
             # Update augmentation
-            if i % args.n_inner == 0:
+            if global_iter_idx % args.n_inner == 0:
                 if main_process:
                     num_update_aug += 1
                     print(f'num_update_aug: {num_update_aug}')
@@ -206,17 +215,25 @@ def main(args):
         if main_process:
             avg_dict = meter.make_avg_dict()
             print(avg_dict)
-            loss_aug = avg_dict['loss adv.'] + avg_dict['loss teacher'] + avg_dict['color reg.'] # 이 크기가 작다.
-            wandb.log({
-                'step': epoch,
-                'train/loss_adv': avg_dict['loss adv.'], # 작다. 키우고 싶지만, 안 커진다.
-                'train/loss_tea': avg_dict['loss teacher'], # 크다. 작게 하고 싶지만, 크다.
-                'train/loss_color': avg_dict['color reg.'],
-                'train/loss_aug': loss_aug, # 작다.
-                'train/acc_adv': avg_dict['acc.'],
-                'train/acc_tea': avg_dict['acc. teacher'],
-                'train/loss_cls': avg_dict['loss cls.'],
-            })
+            if 'loss adv.' in avg_dict:
+                # update of augmentation network is done
+                loss_aug = avg_dict['loss adv.'] + avg_dict['loss teacher'] + avg_dict['color reg.'] # 이 크기가 작다.
+                wandb.log({
+                    'step': epoch,
+                    'train/loss_adv': avg_dict['loss adv.'], # 작다. 키우고 싶지만, 안 커진다.
+                    'train/loss_tea': avg_dict['loss teacher'], # 크다. 작게 하고 싶지만, 크다.
+                    'train/loss_color': avg_dict['color reg.'],
+                    'train/loss_aug': loss_aug, # 작다.
+                    'train/acc_adv': avg_dict['acc.'],
+                    'train/acc_tea': avg_dict['acc. teacher'],
+                    'train/loss_cls': avg_dict['loss cls.'],
+                })
+            else:
+                # only update of target classifier is done
+                wandb.log({
+                    'step': epoch,
+                    'train/loss_cls': avg_dict['loss cls.'],
+                })
 
         # Store augmentation in buffer
         if args.sampling_freq > 0 and epoch % args.sampling_freq == 0:
@@ -434,6 +451,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', default='CIFAR10', choices=['CIFAR10', 'CIFAR100', 'ImageNet'])
     parser.add_argument('--root', default='./data', type=str,
                         help='/path/to/dataset')
+    parser.add_argument('--data_fraction', default=1, type=int)
     # Model
     parser.add_argument('--model', default='wrn-28-10', type=str)
     parser.add_argument('--fixed_teacher', default='', type=str)

@@ -7,10 +7,11 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch \
   --master_port=10011 main.py \
     --dist \
     --wandb_store_image \
-    --wandb_str ema1-n_inner1000 \
+    --wandb_str ema1-n_inner1000-fraction10 \
     --seed 1 \
     --sampling_freq 0 \
     --n_inner 1000 \
+    --data_fraction 10 \
     --root /hdd/hdd4/lsj/torchvision_dataset/CIFAR10 \
     --log_dir /hdd/hdd4/lsj/teach_augment \
     --dataset CIFAR10 \
@@ -38,10 +39,11 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python -m torch.distributed.launch \
   --master_port=10033 main.py \
     --dist \
     --wandb_store_image \
-    --wandb_str fixed1-n_inner1000 \
+    --wandb_str fixed1-n_inner1000-fraction10 \
     --seed 1 \
     --sampling_freq 0 \
     --n_inner 1000 \
+    --data_fraction 10 \
     --fixed_teacher /hdd/hdd4/lsj/teach_augment/20230309-17:38:01/withoutDA-wrn-28-10-epoch480.pt \
     --root /hdd/hdd4/lsj/torchvision_dataset/CIFAR10 \
     --log_dir /hdd/hdd4/lsj/teach_augment \
@@ -79,11 +81,12 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch \
   --master_port=10055 main.py \
     --dist \
     --wandb_store_image \
-    --wandb_str ema1-coeff10-n_inner1000 \
+    --wandb_str ema1-coeff10-n_inner1000-fraction10 \
     --seed 1 \
     --teacher_loss_coeff 10.0 \
     --sampling_freq 0 \
     --n_inner 1000 \
+    --data_fraction 10 \
     --root /hdd/hdd4/lsj/torchvision_dataset/CIFAR10 \
     --log_dir /hdd/hdd4/lsj/teach_augment \
     --dataset CIFAR10 \
@@ -112,11 +115,12 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python -m torch.distributed.launch \
   --master_port=10077 main.py \
     --dist \
     --wandb_store_image \
-    --wandb_str fixed1-coeff10-n_inner1000 \
+    --wandb_str fixed1-coeff10-n_inner1000-fraction10 \
     --seed 1 \
     --teacher_loss_coeff 10.0 \
     --sampling_freq 0 \
     --n_inner 1000 \
+    --data_fraction 10 \
     --fixed_teacher /hdd/hdd4/lsj/teach_augment/20230309-17:38:01/withoutDA-wrn-28-10-epoch480.pt \
     --root /hdd/hdd4/lsj/torchvision_dataset/CIFAR10 \
     --log_dir /hdd/hdd4/lsj/teach_augment \
