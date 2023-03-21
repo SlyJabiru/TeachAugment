@@ -56,7 +56,7 @@ n_channel = 1 if args.dataset == 'MNIST' else 3
 model = build_model('wrn-28-10', n_classes, n_channel).to(device)
 
 lr = 0.005
-num_epochs = 300
+num_epochs = 200
 optimizer = optim.Adam(model.parameters(), lr=lr)
 loss_function = nn.CrossEntropyLoss().to(device)
 
@@ -144,5 +144,5 @@ for epoch in range(0, num_epochs):
         'eval/acc': correct/total,
     })
 
-    if epoch % 30 == 0:
+    if epoch % 20 == 0:
         torch.save(model.state_dict(), os.path.join(args.log_dir, f'withoutDA-wrn-28-10-epoch{epoch:02d}.pt'))

@@ -214,12 +214,15 @@ def main(args):
         # Log performances each epoch
         if main_process:
             avg_dict = meter.make_avg_dict()
+            # print(f'epoch:{epoch}, global_iter_idx: {global_iter_idx}')
             print(avg_dict)
             if 'loss adv.' in avg_dict:
                 # update of augmentation network is done
                 loss_aug = avg_dict['loss adv.'] + avg_dict['loss teacher'] + avg_dict['color reg.'] # 이 크기가 작다.
                 wandb.log({
                     'step': epoch,
+                    'global_iter_idx': global_iter_idx,
+                    'num_update_aug': num_update_aug,
                     'train/loss_adv': avg_dict['loss adv.'], # 작다. 키우고 싶지만, 안 커진다.
                     'train/loss_tea': avg_dict['loss teacher'], # 크다. 작게 하고 싶지만, 크다.
                     'train/loss_color': avg_dict['color reg.'],
@@ -232,6 +235,8 @@ def main(args):
                 # only update of target classifier is done
                 wandb.log({
                     'step': epoch,
+                    'global_iter_idx': global_iter_idx,
+                    'num_update_aug': num_update_aug,
                     'train/loss_cls': avg_dict['loss cls.'],
                 })
 
