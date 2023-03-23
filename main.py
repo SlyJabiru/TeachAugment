@@ -42,14 +42,18 @@ def main(args):
     train_data, eval_data, n_classes = build_dataset(args.dataset, args.root, train_trans, val_trans)
     print(f'len(subset_train) before fraction: {len(train_data)}')
 
-    subset_indices = list(range(0, len(train_data), args.data_fraction))
+    # subset_indices = list(range(0, len(train_data), args.data_fraction))
+    # subset_indices = [0, 11, 1, 21, 2, 9, 3, 6, 4, 19, 5, 16, 7, 10, 13, 18, 15, 29, 17, 31]
+    subset_indices = [0, 1, 2, 3, 4, 5, 7, 13, 15, 17]
+    args.batch_size = len(subset_indices)
     train_data = torch.utils.data.Subset(train_data, subset_indices)
     print(f'len(subset_train) after fraction: {len(train_data)}')
 
     sampler = torch.utils.data.DistributedSampler(train_data, num_replicas=args.world_size, rank=args.local_rank) if args.dist else None
     train_loader = DataLoader(train_data, args.batch_size, not args.dist, sampler,
                               num_workers=args.num_workers, pin_memory=True,
-                              drop_last=True)
+                            #   drop_last=True
+                              )
     eval_loader = DataLoader(eval_data, 1)
     n_channel = 1 if args.dataset == 'MNIST' else 3
     # Model
@@ -448,6 +452,7 @@ def main(args):
         logger.info(f'Final Evaluation: {args.dataset} error rate (%) | Target model: Top1 {100 - model_acc1/n_samples}, Top5 {100 - model_acc5/n_samples}')
         logger.info(f'Final Evaluation: {args.dataset} error rate (%) | Teacher model: Top1 {100 - ema_model_acc1/n_samples}, Top5 {100 - ema_model_acc5/n_samples}')
 
+
 if __name__ == '__main__':
     import argparse
 
@@ -532,10 +537,10 @@ if __name__ == '__main__':
     parser.add_argument('--wandb_project', default='TeachAugment', type=str, help='a string to use as a wandb project name.')
     parser.add_argument('--wandb_str', default='', type=str, help='a string to use in wandb run name.')
     parser.add_argument('--wandb_store_image', action='store_true', help='a flag whether images are saved in wandb or not')
-    parser.add_argument('--n_check_aug_param', default=5, type=int, help='an integer indicating how frequently augmentation parameters are checked.')
-    parser.add_argument('--n_eval', default=5, type=int, help='an integer indicating how frequently evaluations are done during training.')
-    parser.add_argument('--n_save_image', default=5, type=int, help='an integer indicating how frequently images are saved during training.')
-    parser.add_argument('--n_check_norm', default=5, type=int, help='an integer indicating how frequently model norms are checked.')
+    parser.add_argument('--n_check_aug_param', default=10, type=int, help='an integer indicating how frequently augmentation parameters are checked.')
+    parser.add_argument('--n_eval', default=10, type=int, help='an integer indicating how frequently evaluations are done during training.')
+    parser.add_argument('--n_save_image', default=10, type=int, help='an integer indicating how frequently images are saved during training.')
+    parser.add_argument('--n_check_norm', default=10, type=int, help='an integer indicating how frequently model norms are checked.')
 
     args = parser.parse_args()
 

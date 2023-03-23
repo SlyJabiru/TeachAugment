@@ -2,9 +2,9 @@ model: wrn-28-10
 dataset: MNIST
 
 optim:
-  lr: 0.05
+  lr: 0.1
   weight_decay: 0.0005
-  n_epochs: 100
+  n_epochs: 200
 
 label_smooth:
   epsilon: 0.2
