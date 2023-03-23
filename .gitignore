@@ -1,3 +1,4 @@
 __pycache__/
 stdouts/
 wandb/
+.ipynb_checkpoints

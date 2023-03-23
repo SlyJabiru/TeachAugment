@@ -178,7 +178,7 @@ def main(args):
             if global_iter_idx % args.n_inner == 0:
                 if main_process:
                     num_update_aug += 1
-                    print(f'num_update_aug: {num_update_aug}')
+                    # print(f'num_update_aug: {num_update_aug}')
 
                 optim_aug.zero_grad()
                 if args.dist and args.save_memory: # computating gradient independently for saving memory
@@ -453,7 +453,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     # Dataset
-    parser.add_argument('--dataset', default='CIFAR10', choices=['CIFAR10', 'CIFAR100', 'ImageNet'])
+    parser.add_argument('--dataset', default='CIFAR10', choices=['MNIST', 'CIFAR10', 'CIFAR100', 'ImageNet'])
     parser.add_argument('--root', default='./data', type=str,
                         help='/path/to/dataset')
     parser.add_argument('--data_fraction', default=1, type=int)
