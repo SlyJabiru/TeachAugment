@@ -80,7 +80,7 @@ class TeachAugment(nn.Module):
         # augmentation
         with torch.no_grad():
             aug_x, _ = self.trainable_aug(x, c)
-            if self.base_aug is not None:
+            if self.base_aug:
                 inputs = torch.stack([self.base_aug(_x) for _x in aug_x])
             else:
                 inputs = aug_x

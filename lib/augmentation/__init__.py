@@ -22,10 +22,8 @@ def get_transforms(dataset):
                                    normalizer])
     elif dataset == 'MNIST':
         normalizer = T.Normalize((0.1307,), (0.3081,))
-        train_transform = T.Compose([T.RandomCrop(28, padding=4),
-                                     T.ToTensor()])
-        base_aug = [normalizer,
-                    cutout.Cutout(size=14)]
+        train_transform = T.Compose([T.ToTensor(), normalizer])
+        base_aug = []
         val_transform = T.Compose([T.ToTensor(), normalizer])
     else:
         normalizer = T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
