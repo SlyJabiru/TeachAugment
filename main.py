@@ -385,14 +385,51 @@ def main(args):
             eval_avg_dict = eval_meter.make_avg_dict()
             wandb.log({
                 'step': epoch,
-                'eval/loss_cls': eval_avg_dict['model_eval_loss'],
-                'eval/acc1_cls': eval_avg_dict['model_eval_acc1'],
-                'eval/acc5_cls': eval_avg_dict['model_eval_acc5'],
-                'eval/loss_tea': eval_avg_dict['ema_model_eval_loss'],
-                'eval/acc1_tea': eval_avg_dict['ema_model_eval_acc1'],
-                'eval/acc5_tea': eval_avg_dict['ema_model_eval_acc5'],
+                'eval/loss_cls_eval': eval_avg_dict['model_eval_loss'],
+                'eval/acc1_cls_eval': eval_avg_dict['model_eval_acc1'],
+                'eval/acc5_cls_eval': eval_avg_dict['model_eval_acc5'],
+                'eval/loss_tea_eval': eval_avg_dict['ema_model_eval_loss'],
+                'eval/acc1_tea_eval': eval_avg_dict['ema_model_eval_acc1'],
+                'eval/acc5_tea_eval': eval_avg_dict['ema_model_eval_acc5'],
             })
             logger.info(eval_meter.mean_state(f'[Eval] epoch [{epoch}/{args.n_epochs}]',''))
+
+            train_meter = utils.AvgMeter()
+            n_samples = len(train_data)
+            with torch.no_grad():
+                for data in train_loader:
+                    input, target = data
+                    input = input.to(device)
+                    target = target.to(device)
+
+                    model_pred = model(input)
+                    model_train_loss = F.cross_entropy(model_pred, target)
+                    model_train_accs = utils.accuracy(model_pred, target, (1, 5))
+
+                    ema_model_pred = ema_model(input)
+                    ema_model_train_loss = F.cross_entropy(ema_model_pred, target)
+                    ema_model_train_accs = utils.accuracy(ema_model_pred, target, (1, 5))
+
+                    train_meter.add({
+                        'model_train_loss': model_train_loss.item(),
+                        'model_train_acc1': model_train_accs[0],
+                        'model_train_acc5': model_train_accs[1],
+                        'ema_model_train_loss': ema_model_train_loss.item(),
+                        'ema_model_train_acc1': ema_model_train_accs[0],
+                        'ema_model_train_acc5': ema_model_train_accs[1],
+                    })
+            train_avg_dict = train_meter.make_avg_dict()
+            wandb.log({
+                'step': epoch,
+                'eval/loss_cls_train': train_avg_dict['model_train_loss'],
+                'eval/acc1_cls_train': train_avg_dict['model_train_acc1'],
+                'eval/acc5_cls_train': train_avg_dict['model_train_acc5'],
+                'eval/loss_tea_train': train_avg_dict['ema_model_train_loss'],
+                'eval/acc1_tea_train': train_avg_dict['ema_model_train_acc1'],
+                'eval/acc5_tea_train': train_avg_dict['ema_model_train_acc5'],
+            })
+            logger.info(train_meter.mean_state(f'[Eval] epoch [{epoch}/{args.n_epochs}]',''))
+
 
     # Evaluation
     if main_process:
