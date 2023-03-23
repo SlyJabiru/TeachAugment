@@ -476,12 +476,12 @@ def main(args):
         eval_avg_dict = eval_meter.make_avg_dict()
         wandb.log({
             'step': epoch+1,
-            'eval/loss_cls': eval_avg_dict['model_eval_loss'],
-            'eval/acc1_cls': eval_avg_dict['model_eval_acc1'],
-            'eval/acc5_cls': eval_avg_dict['model_eval_acc5'],
-            'eval/loss_tea': eval_avg_dict['ema_model_eval_loss'],
-            'eval/acc1_tea': eval_avg_dict['ema_model_eval_acc1'],
-            'eval/acc5_tea': eval_avg_dict['ema_model_eval_acc5'],
+            'eval/loss_cls_eval': eval_avg_dict['model_eval_loss'],
+            'eval/acc1_cls_eval': eval_avg_dict['model_eval_acc1'],
+            'eval/acc5_cls_eval': eval_avg_dict['model_eval_acc5'],
+            'eval/loss_tea_eval': eval_avg_dict['ema_model_eval_loss'],
+            'eval/acc1_tea_eval': eval_avg_dict['ema_model_eval_acc1'],
+            'eval/acc5_tea_eval': eval_avg_dict['ema_model_eval_acc5'],
         })
         print('eval_avg_dict')
         print(eval_avg_dict)
