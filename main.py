@@ -72,12 +72,14 @@ def main(args):
         fixed_model_for_check = build_model(args.model, n_classes, n_channel)
         fixed_model_for_check.load_state_dict(torch.load(args.fixed_teacher))
         fixed_model_for_check = fixed_model_for_check.to(device)
+        ema_model.eval()
+        fixed_model_for_check.eval()
     else:
         print(f'Make EMA Teacher')
         ema_model = optim.swa_utils.AveragedModel(model, avg_fn=avg_fn)
+        ema_model.train()
     for ema_p in ema_model.parameters():
         ema_p.requires_grad_(False)
-    ema_model.train()
 
     # Trainable Augmentation
     rbuffer = augmentation.replay_buffer.ReplayBuffer(args.rb_decay)
@@ -160,7 +162,10 @@ def main(args):
     global_iter_idx = 0
     for epoch in range(st_epoch, args.n_epochs + 1):
         model.train()
-        ema_model.train()
+        if args.fixed_teacher:
+            ema_model.eval()
+        else:
+            ema_model.train()
         trainable_aug.train()
         if args.dist:
             train_loader.sampler.set_epoch(epoch)
