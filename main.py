@@ -42,10 +42,12 @@ def main(args):
     train_data, eval_data, n_classes = build_dataset(args.dataset, args.root, train_trans, val_trans)
     print(f'len(subset_train) before fraction: {len(train_data)}')
 
-    # subset_indices = list(range(0, len(train_data), args.data_fraction))
     # subset_indices = [0, 11, 1, 21, 2, 9, 3, 6, 4, 19, 5, 16, 7, 10, 13, 18, 15, 29, 17, 31]
-    subset_indices = [0, 1, 2, 3, 4, 5, 7, 13, 15, 17]
-    args.batch_size = len(subset_indices)
+    if args.data_fraction == 6000:
+        subset_indices = [0, 1, 2, 3, 4, 5, 7, 13, 15, 17]
+        args.batch_size = len(subset_indices)
+    else:
+        subset_indices = list(range(0, len(train_data), args.data_fraction))
     train_data = torch.utils.data.Subset(train_data, subset_indices)
     print(f'len(subset_train) after fraction: {len(train_data)}')
 
@@ -520,7 +522,7 @@ if __name__ == '__main__':
                         help='weight decay for augmentation model')
     parser.add_argument('--scheduler', default='gradual_warm', choices=['original', 'gradual_warm'], type=str)
     # Augmentation
-    parser.add_argument('--g_offset', default=-0.5, type=float,
+    parser.add_argument('--g_offset', default=0.5, type=float,
                         help='the search range offset of the magnitude of geometric augmantation')
     parser.add_argument('--g_scale', default=0.5, type=float,
                         help='the search range of the magnitude of geometric augmantation')

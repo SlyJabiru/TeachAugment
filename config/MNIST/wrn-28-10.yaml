@@ -2,7 +2,7 @@ model: wrn-28-10
 dataset: MNIST
 
 optim:
-  lr: 0.1
+  lr: 0.01
   weight_decay: 0.0005
 
 label_smooth:
