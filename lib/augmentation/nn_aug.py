@@ -166,7 +166,7 @@ class ColorAugmentation(nn.Module):
         
 
 class GeometricAugmentation(nn.Module):
-    def __init__(self, n_classes=10, offset=-0.5, scale=0.5, g_scale_unlimited=False, n_dim=128, dropout_ratio=0.8, with_context=True):
+    def __init__(self, n_classes=10, offset=0.5, scale=0.5, g_scale_unlimited=False, n_dim=128, dropout_ratio=0.8, with_context=True):
         super().__init__()
 
         hidden = 4 * n_dim
