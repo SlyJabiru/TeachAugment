@@ -134,7 +134,13 @@ def main(args):
     #     scheduler = GradualWarmupScheduler(optim_cls, 1, 5, base_scheduler)
 
     # Objective function
-    adv_criterion = non_saturating_loss.NonSaturatingLoss(args.epsilon)
+    if args.adv_criterion == 'non-saturating':
+        adv_criterion = non_saturating_loss.NonSaturatingLoss(args.epsilon)
+    elif args.adv_criterion == 'cross-entropy':
+        adv_criterion = torch.nn.CrossEntropyLoss(label_smoothing=args.epsilon)
+    else:
+        raise Exception(f'args.adv_criterion should be either "non-saturating" or "cross-entropy", current args.adv_criterion: {args.adv_criterion}')
+
     objective = teachaugment.TeachAugment(model, ema_model, trainable_aug,
                                           adv_criterion, args.teacher_loss_coeff, args.weight_decay,
                                           base_aug, normalizer, not args.dist and args.save_memory).to(device)
@@ -521,6 +527,7 @@ if __name__ == '__main__':
     parser.add_argument('--aug_weight_decay', '-awd', default=1e-2, type=float,
                         help='weight decay for augmentation model')
     parser.add_argument('--scheduler', default='gradual_warm', choices=['original', 'gradual_warm'], type=str)
+    parser.add_argument('--adv_criterion', default='non-saturating', choices=['non-saturating', 'cross-entropy'], type=str)
     # Augmentation
     parser.add_argument('--g_offset', default=0.5, type=float,
                         help='the search range offset of the magnitude of geometric augmantation')

@@ -12,7 +12,7 @@ g_scale_command = f'--g_scale {g_scale}' if g_scale else ''
 c_scale = 0.8 # default: 0.8
 c_scale_command = f'--c_scale {c_scale}' if c_scale else ''
 
-g_offset = -0.5 # default -0.5
+g_offset = 0.5 # default 0.5
 g_offset_command = f'--g_offset {g_offset}' if g_offset else ''
 
 g_scale_unlimited = False
